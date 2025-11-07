@@ -1,7 +1,6 @@
 # 파일 경로 정의 (Streamlit 실행 파일)
 file_path = "app.py" 
 
-# 전체 코드를 불러와 비표준 공백 문자를 제거하고 표준 4칸 공백 들여쓰기로 재정렬
 code_content = """
 import streamlit as st
 import pandas as pd
@@ -75,7 +74,8 @@ for var, default_val in DEFAULT_INPUT_VALS.items():
 
 @st.cache_data(show_spinner=False)
 def load_df_from_uploader(uploaded_file):
-    """업로드된 파일(xlsx, csv)을 Pandas DataFrame으로 로드합니다."""
+    # 에러가 발생하는 독스트링을 주석으로 대체하여 오류를 방지합니다.
+    # 업로드된 파일(xlsx, csv)을 Pandas DataFrame으로 로드합니다.
     if uploaded_file is not None:
         try:
             file_extension = uploaded_file.name.split('.')[-1].lower()
@@ -533,12 +533,10 @@ with tab2:
         st.warning("모델 학습이 필요합니다.")
 """
 
-# 비표준 공백(Non-breaking space: \xa0)을 표준 공백으로 치환
-# 이 치환을 통해 문제의 독스트링 오류를 확실히 해결합니다.
+# 비표준 공백(\xa0)을 표준 공백으로 치환하고 파일 저장
 sanitized_code_content = code_content.replace('\xa0', ' ')
 
-# Save the modified code
 with open(file_path, "w", encoding="utf-8") as f:
     f.write(sanitized_code_content)
 
-print(f"File '{file_path}' has been definitively saved with standardized indentation and no non-breaking spaces.")
+print(f"File '{file_path}' has been definitively saved after removing the problematic docstring structure and ensuring clean indentation.")
