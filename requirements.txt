@@ -1,8 +1,7 @@
-# requirements.txt 파일 내용
 streamlit
 pandas
 numpy
-matplotlib
-seaborn
-plotly
 scikit-learn
+scipy
+joblib
+openpyxl
