@@ -13,6 +13,19 @@ from scipy.optimize import minimize
 # =================================================================
 st.set_page_config(layout="wide", page_title="Weld Line 통합 진단 시스템")
 
+# 공정 변수 정의 (X 변수)
+PROCESS_VARS = ['T_Melt', 'V_Inj', 'P_Pack', 'T_Mold', 'Meter', 'VP_Switch_Pos']
+# 종속 변수 정의 (Y 변수)
+TARGET_VAR = 'Y_Weld'
+# 불량 기준 (0.5 이상이면 1, 미만이면 0)
+DEFECT_THRESHOLD = 0.5
+
+# 슬라이더 및 입력 필드의 기본값 정의
+DEFAULT_INPUT_VALS = {
+    'T_Melt': 230, 'V_Inj': 3, 'P_Pack': 70, 
+    'T_Mold': 50, 'Meter': 195, 'VP_Switch_Pos': 14
+}
+
 # 시스템 상태 초기화 (세션 상태)
 if 'model' not in st.session_state:
     st.session_state['model'] = None
@@ -27,12 +40,16 @@ if 'df_real' not in st.session_state:
 if 'scaler' not in st.session_state:
     st.session_state['scaler'] = None
 
-# 공정 변수 정의 (X 변수)
-PROCESS_VARS = ['T_Melt', 'V_Inj', 'P_Pack', 'T_Mold', 'Meter', 'VP_Switch_Pos']
-# 종속 변수 정의 (Y 변수)
-TARGET_VAR = 'Y_Weld'
-# 불량 기준 (0.5 이상이면 1, 미만이면 0)
-DEFECT_THRESHOLD = 0.5
+# -------------------------------------------------------------
+# 🌟 오류 해결을 위한 핵심 수정: 슬라이더 초기값을 여기서 설정!
+# -------------------------------------------------------------
+for var, default_val in DEFAULT_INPUT_VALS.items():
+    # 'input_T_Melt' 등의 키가 세션에 없으면 기본값을 할당합니다.
+    if f'input_{var}' not in st.session_state:
+        # 슬라이더가 요구하는 float/int 타입으로 명시적으로 변환하여 저장
+        st.session_state[f'input_{var}'] = float(default_val)
+# -------------------------------------------------------------
+
 
 # =================================================================
 # 1. 데이터 로드 및 전처리 함수
@@ -187,7 +204,7 @@ with st.sidebar:
                 init_row = st.session_state['df_init'].iloc[0]
                 for var in PROCESS_VARS:
                     if var in init_row:
-                        # 슬라이더 상태 업데이트를 위해 세션 상태에 저장
+                        # 슬라이더 상태 업데이트를 위해 세션 상태에 저장 (float으로 변환)
                         st.session_state[f'input_{var}'] = float(init_row[var])
 
 
@@ -226,17 +243,10 @@ with tab1:
     
     col_melt, col_inj, col_pack = st.columns(3)
     col_mold, col_meter, col_vp = st.columns(3)
-    
-    # 공정 변수 초기값 설정 (session_state 활용)
-    default_vals = {'T_Melt': 230, 'V_Inj': 3, 'P_Pack': 70, 
-                    'T_Mold': 50, 'Meter': 195, 'VP_Switch_Pos': 14}
-    
-    # 세션 상태에 초기값 설정
-    for var, default_val in default_vals.items():
-        if f'input_{var}' not in st.session_state:
-            st.session_state[f'input_{var}'] = default_val
 
-    # 슬라이더 UI 생성
+    # -------------------------------------------------------------
+    # 슬라이더 UI 생성 (세션 상태의 초기값이 이미 할당되어 있어 오류 방지)
+    # -------------------------------------------------------------
     input_vars = {}
     with col_melt:
         # 기본값으로 session_state 사용
@@ -283,15 +293,11 @@ with tab1:
         def run_diagnosis():
             """진단 버튼 클릭 시 실행"""
             # 이미 위에서 current_risk를 계산했으므로, 여기서는 UI 업데이트만.
-            # current_risk가 전역적으로 계산되므로, 콜백 함수를 사용하지 않아도 되지만, 사용자 경험을 위해 유지합니다.
             if current_risk >= 0.5:
                 st.error("🔴 위험도 높음: 즉시 최적화 조건을 검토하세요.")
             else:
                 st.success("🟢 위험도 낮음: 현재 조건을 유지해도 좋습니다.")
                 
-        # st.button("🔴 Weld Line 통합 진단 실행", on_click=run_diagnosis)
-        # 콜백 함수 없이 직접 실행 후 결과를 표시하도록 변경 (Streamlit의 재실행 특성 활용)
-
         # -----------------
         # 최적화 실행
         # -----------------
