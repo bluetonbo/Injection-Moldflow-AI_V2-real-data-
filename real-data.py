@@ -2,7 +2,7 @@
 file_path = "app.py" 
 
 # 전체 코드를 표준 4칸 공백 들여쓰기로 정리하여 저장
-# (이전에 제공한 코드와 내용상 동일하나, 공백/들여쓰기만 정제함)
+# (load_df_from_uploader 함수의 들여쓰기를 포함한 전체 코드의 공백 문자를 정규화했습니다.)
 code = """
 import streamlit as st
 import pandas as pd
@@ -537,4 +537,4 @@ with tab2:
 with open(file_path, "w", encoding="utf-8") as f:
     f.write(code)
 
-print(f"File '{file_path}' has been successfully created/updated with clean indentation.")
+print(f"File '{file_path}' has been definitively saved with standardized indentation.")
