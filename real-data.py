@@ -74,7 +74,7 @@ for var, default_val in DEFAULT_INPUT_VALS.items():
 
 @st.cache_data(show_spinner=False)
 def load_df_from_uploader(uploaded_file):
-    # 에러가 발생하는 독스트링을 주석으로 대체하여 오류를 방지합니다.
+    # 독스트링을 주석으로 대체하여 오류를 방지합니다.
     # 업로드된 파일(xlsx, csv)을 Pandas DataFrame으로 로드합니다.
     if uploaded_file is not None:
         try:
@@ -96,7 +96,7 @@ def load_df_from_uploader(uploaded_file):
     return None
 
 def process_weld_data(df_virtual, df_real):
-    # 에러가 발생하는 독스트링을 주석으로 대체하여 오류를 방지합니다. (Line 99)
+    # 독스트링을 주석으로 대체하여 오류를 방지합니다.
     # 실제 데이터와 가상 데이터를 결합하고 전처리합니다.
     
     valid_dataframes = [df for df in [df_real, df_virtual] if df is not None and not df.empty]
@@ -124,7 +124,8 @@ def process_weld_data(df_virtual, df_real):
 # =================================================================
 
 def train_model(df):
-    """데이터를 사용하여 로지스틱 회귀 모델을 학습하고 스케일러를 저장합니다."""
+    # 독스트링을 주석으로 대체하여 오류를 방지합니다. (Line 127)
+    # 데이터를 사용하여 로지스틱 회귀 모델을 학습하고 스케일러를 저장합니다.
     if df.empty:
         # st.error("⚠️ 학습할 데이터가 비어 있습니다.") # 사이드바에서 이미 처리
         return None, None
@@ -145,7 +146,8 @@ def train_model(df):
 # =================================================================
 
 def predict_weld_risk(model, scaler, input_data):
-    """입력 데이터에 대한 불량 확률을 예측합니다."""
+    # 독스트링을 주석으로 대체하여 오류를 방지합니다.
+    # 입력 데이터에 대한 불량 확률을 예측합니다.
     if model is None or scaler is None:
         return 0.5 
         
@@ -184,7 +186,8 @@ with st.sidebar:
 
 
     def load_and_train_model():
-        """파일을 로드하고 모델 학습을 실행하는 콜백 함수"""
+        # 콜백 함수 독스트링도 주석으로 대체합니다.
+        # 파일을 로드하고 모델 학습을 실행하는 콜백 함수
         
         # 1. 데이터 처리
         df_weld_processed = process_weld_data(st.session_state['df_virtual'], st.session_state['df_real'])
@@ -353,7 +356,8 @@ with tab1:
         
         
         def run_diagnosis():
-            """진단 버튼 클릭 시 실행"""
+            # 독스트링을 주석으로 대체합니다.
+            # 진단 버튼 클릭 시 실행
             model = st.session_state['model']
             scaler = st.session_state['scaler']
             input_data = st.session_state['current_input_vars']
@@ -364,7 +368,8 @@ with tab1:
             st.session_state['last_risk'] = risk
                 
         def run_optimization():
-            """최적 공정 조건 제시 버튼 클릭 시 실행 (노하우 계수 반영)"""
+            # 독스트링을 주석으로 대체합니다.
+            # 최적 공정 조건 제시 버튼 클릭 시 실행 (노하우 계수 반영)
             model = st.session_state['model']
             scaler = st.session_state['scaler']
             current_inputs = st.session_state['current_input_vars']
@@ -517,6 +522,8 @@ with tab2:
         model = st.session_state['model']
         st.subheader("1. 학습된 로지스틱 회귀 모델 계수")
         
+        # 독스트링이 없으므로 이 부분은 유지합니다.
+        
         coefficients = pd.DataFrame({
             '변수': ['(절편)'] + PROCESS_VARS,
             '계수(Coefficient)': [model.intercept_[0]] + list(model.coef_[0])
@@ -537,7 +544,8 @@ with tab2:
 # 비표준 공백(\xa0)을 표준 공백으로 치환하고 파일 저장
 sanitized_code_content = code_content.replace('\xa0', ' ')
 
+# Save the modified code
 with open(file_path, "w", encoding="utf-8") as f:
     f.write(sanitized_code_content)
 
-print(f"File '{file_path}' has been definitively saved after removing all known problematic docstring structures and ensuring clean indentation.")
+print(f"File '{file_path}' has been definitively saved after removing all docstrings and ensuring clean indentation.")
