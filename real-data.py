@@ -65,7 +65,7 @@ def load_df_from_uploader(uploaded_file):
 def process_weld_data(df_virtual, df_real):
     """실제 데이터와 가상 데이터를 결합하고 전처리합니다."""
     
-    # None이 아니거나 비어있지 않은 DataFrame만 필터링하여 결합
+    # None이 아니거나 비어있지 않은 DataFrame만 필터링하여 결합 (오류 방지 로직)
     valid_dataframes = [df for df in [df_real, df_virtual] if df is not None and not df.empty]
     
     if not valid_dataframes:
@@ -119,6 +119,7 @@ def train_model(df):
 def predict_weld_risk(model, scaler, input_data):
     """입력 데이터에 대한 불량 확률을 예측합니다."""
     if model is None or scaler is None:
+        # st.warning("모델 학습이 필요합니다.") # 예측 함수 내에서는 경고 표시 자제
         return 0.5 # 모델이 없으면 중간값 반환
         
     # 입력 데이터를 DataFrame으로 변환 (컬럼 순서 유지)
@@ -153,7 +154,7 @@ with st.sidebar:
         "3. 해석 학습 데이터 (moldflow_condition.xlsx) [필수]", type=['xlsx', 'csv'], key="real_file"
     )
 
-    # 세션 상태에 파일 로드 (함수 호출)
+    # 세션 상태에 파일 로드 (함수 호출) - 캐싱 함수 사용
     st.session_state['df_init'] = load_df_from_uploader(uploaded_file_init)
     st.session_state['df_virtual'] = load_df_from_uploader(uploaded_file_virtual)
     st.session_state['df_real'] = load_df_from_uploader(uploaded_file_real)
@@ -186,6 +187,7 @@ with st.sidebar:
                 init_row = st.session_state['df_init'].iloc[0]
                 for var in PROCESS_VARS:
                     if var in init_row:
+                        # 슬라이더 상태 업데이트를 위해 세션 상태에 저장
                         st.session_state[f'input_{var}'] = float(init_row[var])
 
 
@@ -229,6 +231,7 @@ with tab1:
     default_vals = {'T_Melt': 230, 'V_Inj': 3, 'P_Pack': 70, 
                     'T_Mold': 50, 'Meter': 195, 'VP_Switch_Pos': 14}
     
+    # 세션 상태에 초기값 설정
     for var, default_val in default_vals.items():
         if f'input_{var}' not in st.session_state:
             st.session_state[f'input_{var}'] = default_val
@@ -236,17 +239,18 @@ with tab1:
     # 슬라이더 UI 생성
     input_vars = {}
     with col_melt:
-        input_vars['T_Melt'] = st.slider('용융 온도 (T_Melt)', 200, 300, st.session_state['input_T_Melt'], 5)
+        # 기본값으로 session_state 사용
+        input_vars['T_Melt'] = st.slider('용융 온도 (T_Melt)', 200, 300, st.session_state['input_T_Melt'], 5, key='slider_T_Melt')
     with col_inj:
-        input_vars['V_Inj'] = st.slider('사출 속도 (V_Inj)', 1, 10, st.session_state['input_V_Inj'], 1)
+        input_vars['V_Inj'] = st.slider('사출 속도 (V_Inj)', 1, 10, st.session_state['input_V_Inj'], 1, key='slider_V_Inj')
     with col_pack:
-        input_vars['P_Pack'] = st.slider('보압 (P_Pack)', 50, 100, st.session_state['input_P_Pack'], 5)
+        input_vars['P_Pack'] = st.slider('보압 (P_Pack)', 50, 100, st.session_state['input_P_Pack'], 5, key='slider_P_Pack')
     with col_mold:
-        input_vars['T_Mold'] = st.slider('금형 온도 (T_Mold)', 30, 80, st.session_state['input_T_Mold'], 5)
+        input_vars['T_Mold'] = st.slider('금형 온도 (T_Mold)', 30, 80, st.session_state['input_T_Mold'], 5, key='slider_T_Mold')
     with col_meter:
-        input_vars['Meter'] = st.slider('계량 위치 (Meter)', 180, 200, st.session_state['input_Meter'], 1)
+        input_vars['Meter'] = st.slider('계량 위치 (Meter)', 180, 200, st.session_state['input_Meter'], 1, key='slider_Meter')
     with col_vp:
-        input_vars['VP_Switch_Pos'] = st.slider('VP 전환 위치', 10, 20, st.session_state['input_VP_Switch_Pos'], 1)
+        input_vars['VP_Switch_Pos'] = st.slider('VP 전환 위치', 10, 20, st.session_state['input_VP_Switch_Pos'], 1, key='slider_VP_Switch_Pos')
 
     st.markdown("---")
     st.header("B. 전문가의 정성적 및 정량적 노하우 입력")
@@ -279,13 +283,14 @@ with tab1:
         def run_diagnosis():
             """진단 버튼 클릭 시 실행"""
             # 이미 위에서 current_risk를 계산했으므로, 여기서는 UI 업데이트만.
+            # current_risk가 전역적으로 계산되므로, 콜백 함수를 사용하지 않아도 되지만, 사용자 경험을 위해 유지합니다.
             if current_risk >= 0.5:
                 st.error("🔴 위험도 높음: 즉시 최적화 조건을 검토하세요.")
             else:
                 st.success("🟢 위험도 낮음: 현재 조건을 유지해도 좋습니다.")
                 
-        st.button("🔴 Weld Line 통합 진단 실행", on_click=run_diagnosis)
-
+        # st.button("🔴 Weld Line 통합 진단 실행", on_click=run_diagnosis)
+        # 콜백 함수 없이 직접 실행 후 결과를 표시하도록 변경 (Streamlit의 재실행 특성 활용)
 
         # -----------------
         # 최적화 실행
@@ -314,6 +319,8 @@ with tab1:
             # V_Inj 노하우 제약
             v_inj_idx = PROCESS_VARS.index('V_Inj')
             v_min, v_max = 1, 10
+            
+            # V_Inj_Intent에 따라 경계 조정
             if v_inj_intent == 'Increase':
                 v_min = max(v_min, input_vars['V_Inj'] + v_inj_delta)
             elif v_inj_intent == 'Decrease':
@@ -322,12 +329,14 @@ with tab1:
             # T_Mold 노하우 제약
             t_mold_idx = PROCESS_VARS.index('T_Mold')
             t_min, t_max = 30, 80
+            
+            # T_Mold_Intent에 따라 경계 조정
             if t_mold_intent == 'Increase':
                 t_min = max(t_min, input_vars['T_Mold'] + t_mold_delta)
             elif t_mold_intent == 'Decrease':
                 t_max = min(t_max, input_vars['T_Mold'] - t_mold_delta)
 
-            # 변수별 경계 설정 (Bounds)
+            # 변수별 경계 설정 (Bounds) - 순서 중요!
             bounds = [
                 (200, 300),  # T_Melt
                 (v_min, v_max),  # V_Inj (노하우 반영)
@@ -373,7 +382,12 @@ with tab1:
             except Exception as e:
                 st.error(f"최적화 실행 중 치명적인 오류 발생: {e}")
 
-        st.button("✨ 최적 공정 조건 제시", on_click=run_optimization)
+        # 진단 및 최적화 버튼 분리
+        col_diag, col_opt = st.columns([1,1])
+        with col_diag:
+            st.button("🔴 Weld Line 통합 진단 실행", on_click=run_diagnosis, use_container_width=True)
+        with col_opt:
+            st.button("✨ 최적 공정 조건 제시", on_click=run_optimization, use_container_width=True)
 
     else:
         st.error("🚨 AI 모델이 학습되지 않았습니다. 사이드바에서 파일을 업로드하고 'AI 모델 학습 시작' 버튼을 눌러주세요.")
