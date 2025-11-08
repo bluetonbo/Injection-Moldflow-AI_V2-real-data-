@@ -5,6 +5,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, accuracy_score
 from scipy.optimize import minimize
+from sklearn.preprocessing import MinMaxScaler # 명시적으로 임포트
 
 # =================================================================
 # 0. 초기 설정 및 상수
@@ -61,7 +62,7 @@ def load_df_from_uploader(uploaded_file):
             if file_extension == 'csv':
                 df = pd.read_csv(uploaded_file)
             elif file_extension == 'xlsx':
-                # openpyxl 종속성 사용 (requirements.txt에 추가됨)
+                # openpyxl 종속성 사용
                 df = pd.read_excel(uploaded_file, engine='openpyxl')
             else:
                 st.error(f"⚠️ 지원하지 않는 파일 형식입니다: .{file_extension}")
@@ -114,8 +115,7 @@ def train_model(df):
     X = df[PROCESS_VARS]
     Y = df[TARGET_VAR]
     
-    # 스케일링 (MinMaxScaler 사용을 가정)
-    from sklearn.preprocessing import MinMaxScaler
+    # 스케일링 (MinMaxScaler 사용)
     scaler = MinMaxScaler()
     X_scaled = scaler.fit_transform(X)
     
@@ -135,12 +135,23 @@ def predict_weld_risk(model, scaler, input_data):
         return 0.5 # 모델이 없으면 중간값 반환
         
     # 입력 데이터를 DataFrame으로 변환 (컬럼 순서 유지)
-    input_df = pd.DataFrame([input_data], columns=PROCESS_VARS)
+    # input_data는 딕셔너리 또는 DataFrame 행으로 가정
+    if isinstance(input_data, dict):
+        input_df = pd.DataFrame([input_data], columns=PROCESS_VARS)
+    elif isinstance(input_data, pd.Series):
+        input_df = pd.DataFrame([input_data.to_dict()], columns=PROCESS_VARS)
+    elif isinstance(input_data, pd.DataFrame) and len(input_data) == 1:
+         input_df = input_data[PROCESS_VARS] # 이미 DataFrame인 경우
+    else:
+        st.error("잘못된 입력 데이터 형식")
+        return 0.5
     
     # 스케일링
+    # 주의: scaler.transform은 2D 배열을 기대하므로 DataFrame을 그대로 전달
     input_scaled = scaler.transform(input_df)
     
     # 예측 확률 (불량=1일 확률)
+    # predict_proba는 2D 배열을 반환, [:, 1]은 클래스 1(불량)의 확률
     prediction_proba = model.predict_proba(input_scaled)[:, 1][0]
     
     return prediction_proba
@@ -250,7 +261,7 @@ with tab1:
     with col_melt:
         # 200 -> 200.0, 300 -> 300.0, 5 -> 5.0 (Float 통일)
         input_vars['T_Melt'] = st.slider(
-            '용융 온도 (T_Melt)', 
+            '용융 온도 (T_Melt) [°C]', 
             200.0, 
             300.0, 
             value=st.session_state['input_T_Melt'], 
@@ -260,7 +271,7 @@ with tab1:
     with col_inj:
         # 1 -> 1.0, 10 -> 10.0, 1 -> 1.0 (Float 통일)
         input_vars['V_Inj'] = st.slider(
-            '사출 속도 (V_Inj)', 
+            '사출 속도 (V_Inj) [mm/s]', 
             1.0, 
             10.0, 
             value=st.session_state['input_V_Inj'], 
@@ -270,7 +281,7 @@ with tab1:
     with col_pack:
         # 50 -> 50.0, 100 -> 100.0, 5 -> 5.0 (Float 통일)
         input_vars['P_Pack'] = st.slider(
-            '보압 (P_Pack)', 
+            '보압 (P_Pack) [MPa]', 
             50.0, 
             100.0, 
             value=st.session_state['input_P_Pack'], 
@@ -280,7 +291,7 @@ with tab1:
     with col_mold:
         # 30 -> 30.0, 80 -> 80.0, 5 -> 5.0 (Float 통일)
         input_vars['T_Mold'] = st.slider(
-            '금형 온도 (T_Mold)', 
+            '금형 온도 (T_Mold) [°C]', 
             30.0, 
             80.0, 
             value=st.session_state['input_T_Mold'], 
@@ -290,7 +301,7 @@ with tab1:
     with col_meter:
         # 180 -> 180.0, 200 -> 200.0, 1 -> 1.0 (Float 통일)
         input_vars['Meter'] = st.slider(
-            '계량 위치 (Meter)', 
+            '계량 위치 (Meter) [mm]', 
             180.0, 
             200.0, 
             value=st.session_state['input_Meter'], 
@@ -300,7 +311,7 @@ with tab1:
     with col_vp:
         # 10 -> 10.0, 20 -> 20.0, 1 -> 1.0 (Float 통일)
         input_vars['VP_Switch_Pos'] = st.slider(
-            'VP 전환 위치', 
+            'VP 전환 위치 [mm]', 
             10.0, 
             20.0, 
             value=st.session_state['input_VP_Switch_Pos'], 
@@ -314,15 +325,49 @@ with tab1:
     # 노하우 입력 (V_Inj, T_Mold에 대한 가정)
     col_intent_v, col_delta_v, col_intent_t, col_delta_t = st.columns(4)
 
+    # -------------------------------------------------------------
+    # 🌟 V_Inj 노하우 입력 및 반영
+    # -------------------------------------------------------------
     with col_intent_v:
-        v_inj_intent = st.radio("V_Inj 노하우", ['Keep_Constant', 'Increase', 'Decrease'], horizontal=True)
+        # V_Inj 노하우 - 'Increase'를 기본으로 설정
+        v_inj_intent = st.radio(
+            "사출 속도 (V_Inj) 노하우", 
+            ['Keep_Constant', 'Increase', 'Decrease'], 
+            index=1, # Increase가 두 번째 항목
+            horizontal=True
+        )
     with col_delta_v:
-        v_inj_delta = st.number_input("V_Inj 변화폭 (±)", min_value=0, max_value=5, value=0)
+        # V_Inj 변화폭 (±)
+        v_inj_delta = st.number_input(
+            "V_Inj 최소 변화폭", 
+            min_value=0.0, 
+            max_value=5.0, 
+            value=0.0, 
+            step=0.5,
+            help="노하우 방향으로 최소한 이만큼은 변화해야 함 (ex: Increase 1.0이면 V_Inj >= 현재값 + 1.0)"
+        )
 
+    # -------------------------------------------------------------
+    # 🌟 T_Mold 노하우 입력 및 반영
+    # -------------------------------------------------------------
     with col_intent_t:
-        t_mold_intent = st.radio("T_Mold 노하우", ['Keep_Constant', 'Increase', 'Decrease'], horizontal=True)
+        # T_Mold 노하우 - 'Increase'를 기본으로 설정
+        t_mold_intent = st.radio(
+            "금형 온도 (T_Mold) 노하우", 
+            ['Keep_Constant', 'Increase', 'Decrease'], 
+            index=1, # Increase가 두 번째 항목
+            horizontal=True
+        )
     with col_delta_t:
-        t_mold_delta = st.number_input("T_Mold 변화폭 (±)", min_value=0, max_value=5, value=0)
+        # T_Mold 변화폭 (±)
+        t_mold_delta = st.number_input(
+            "T_Mold 최소 변화폭", 
+            min_value=0.0, 
+            max_value=5.0, 
+            value=0.0, 
+            step=0.5,
+            help="노하우 방향으로 최소한 이만큼은 변화해야 함 (ex: Increase 1.0이면 T_Mold >= 현재값 + 1.0)"
+        )
 
     st.markdown("---")
     
@@ -339,7 +384,7 @@ with tab1:
         def run_diagnosis():
             """진단 버튼 클릭 시 실행"""
             # 이미 위에서 current_risk를 계산했으므로, 여기서는 UI 업데이트만.
-            if current_risk >= 0.5:
+            if current_risk >= DEFECT_THRESHOLD:
                 st.error("🔴 위험도 높음: 즉시 최적화 조건을 검토하세요.")
             else:
                 st.success("🟢 위험도 낮음: 현재 조건을 유지해도 좋습니다.")
@@ -355,47 +400,83 @@ with tab1:
             # 최적화 목표 함수 (불량 확률 최소화)
             def objective_function(X_array):
                 X_df = pd.DataFrame([X_array], columns=PROCESS_VARS)
+                # predict_weld_risk는 입력이 Series나 Dict를 기대하므로 to_dict()로 변환
                 return predict_weld_risk(model, scaler, X_df.iloc[0].to_dict())
 
             # 초기값 설정 (현재 사용자 입력값)
-            X0 = np.array([input_vars[var] for var in PROCESS_VARS])
+            X0 = np.array([input_vars[var] for var in PROCESS_VARS], dtype=float)
 
-            # 노하우 제약 조건 설정
+            # 노하우가 없는 변수 (T_Melt, P_Pack, Meter, VP_Switch_Pos)는 현재 값으로 고정 (Equal Constraint)
             constraints = []
             
-            # T_Melt, P_Pack, Meter, VP_Switch_Pos는 현재 값으로 고정 (노하우 없음 가정)
-            for i, var in enumerate(['T_Melt', 'P_Pack', 'Meter', 'VP_Switch_Pos']):
+            # T_Melt, P_Pack, Meter, VP_Switch_Pos의 인덱스
+            fixed_vars = ['T_Melt', 'P_Pack', 'Meter', 'VP_Switch_Pos']
+            fixed_indices = [PROCESS_VARS.index(var) for var in fixed_vars]
+            
+            # Equal Constraint (현재 값으로 고정)
+            for i, var in enumerate(fixed_vars):
+                idx = PROCESS_VARS.index(var)
+                # X[idx] - X0[idx] = 0 이 되도록 제약
                 constraints.append({'type': 'eq', 
-                                    'fun': lambda X, idx=i, val=X0[i]: X[idx] - val})
+                                     'fun': lambda X, idx=idx, val=X0[idx]: X[idx] - val})
 
-            # V_Inj 노하우 제약
+            # ------------------------------------------------------------------------
+            # 🌟 V_Inj 노하우 제약 (Bounds 설정) - 'V_Inj'는 두 번째 변수 (Index 1)
+            # ------------------------------------------------------------------------
             v_inj_idx = PROCESS_VARS.index('V_Inj')
-            v_min, v_max = 1, 10
+            v_min_global, v_max_global = 1.0, 10.0 # 전체 범위
             
-            # V_Inj_Intent에 따라 경계 조정
+            v_min_opt, v_max_opt = v_min_global, v_max_global # 초기 최적화 범위
+            
+            # V_Inj_Intent에 따라 경계 조정 (노하우 반영)
             if v_inj_intent == 'Increase':
-                v_min = max(v_min, input_vars['V_Inj'] + v_inj_delta)
+                # 최솟값: 현재값 + 변화폭, 최댓값: 글로벌 최댓값
+                v_min_opt = max(v_min_global, input_vars['V_Inj'] + v_inj_delta)
+                v_max_opt = v_max_global
             elif v_inj_intent == 'Decrease':
-                v_max = min(v_max, input_vars['V_Inj'] - v_inj_delta)
-            
-            # T_Mold 노하우 제약
+                # 최솟값: 글로벌 최솟값, 최댓값: 현재값 - 변화폭
+                v_min_opt = v_min_global
+                v_max_opt = min(v_max_global, input_vars['V_Inj'] - v_inj_delta)
+            elif v_inj_intent == 'Keep_Constant':
+                # V_Inj도 고정 (Equal Constraint로 추가)
+                v_min_opt = input_vars['V_Inj']
+                v_max_opt = input_vars['V_Inj']
+                constraints.append({'type': 'eq', 
+                                     'fun': lambda X, idx=v_inj_idx, val=X0[v_inj_idx]: X[idx] - val})
+                
+
+            # ------------------------------------------------------------------------
+            # 🌟 T_Mold 노하우 제약 (Bounds 설정) - 'T_Mold'는 네 번째 변수 (Index 3)
+            # ------------------------------------------------------------------------
             t_mold_idx = PROCESS_VARS.index('T_Mold')
-            t_min, t_max = 30, 80
+            t_min_global, t_max_global = 30.0, 80.0 # 전체 범위
             
-            # T_Mold_Intent에 따라 경계 조정
+            t_min_opt, t_max_opt = t_min_global, t_max_global # 초기 최적화 범위
+            
+            # T_Mold_Intent에 따라 경계 조정 (노하우 반영)
             if t_mold_intent == 'Increase':
-                t_min = max(t_min, input_vars['T_Mold'] + t_mold_delta)
+                # 최솟값: 현재값 + 변화폭, 최댓값: 글로벌 최댓값
+                t_min_opt = max(t_min_global, input_vars['T_Mold'] + t_mold_delta)
+                t_max_opt = t_max_global
             elif t_mold_intent == 'Decrease':
-                t_max = min(t_max, input_vars['T_Mold'] - t_mold_delta)
+                # 최솟값: 글로벌 최솟값, 최댓값: 현재값 - 변화폭
+                t_min_opt = t_min_global
+                t_max_opt = min(t_max_global, input_vars['T_Mold'] - t_mold_delta)
+            elif t_mold_intent == 'Keep_Constant':
+                # T_Mold도 고정 (Equal Constraint로 추가)
+                t_min_opt = input_vars['T_Mold']
+                t_max_opt = input_vars['T_Mold']
+                constraints.append({'type': 'eq', 
+                                     'fun': lambda X, idx=t_mold_idx, val=X0[t_mold_idx]: X[idx] - val})
 
             # 변수별 경계 설정 (Bounds) - 순서 중요!
             bounds = [
-                (200, 300),  # T_Melt
-                (v_min, v_max),  # V_Inj (노하우 반영)
-                (50, 100),  # P_Pack
-                (t_min, t_max),  # T_Mold (노하우 반영)
-                (180, 200),  # Meter
-                (10, 20)     # VP_Switch_Pos
+                (200.0, 300.0),      # T_Melt (idx 0)
+                (v_min_opt, v_max_opt), # V_Inj (idx 1) - 노하우 반영
+                (50.0, 100.0),      # P_Pack (idx 2)
+                (t_min_opt, t_max_opt), # T_Mold (idx 3) - 노하우 반영
+                (180.0, 200.0),     # Meter (idx 4)
+                (10.0, 20.0)        # VP_Switch_Pos (idx 5)
             ]
 
             try:
@@ -403,6 +484,7 @@ with tab1:
                 result = minimize(objective_function, X0, method='SLSQP', bounds=bounds, constraints=constraints)
             
                 if result.success:
+                    # 결과를 소수점 첫째 자리에서 반올림
                     opt_params = {PROCESS_VARS[i]: round(result.x[i], 1) for i in range(len(PROCESS_VARS))}
                     opt_risk = predict_weld_risk(model, scaler, opt_params)
                     
@@ -419,15 +501,19 @@ with tab1:
                     # 최적화 결과와 현재 조건 비교
                     summary_data = {}
                     for var in PROCESS_VARS:
+                        # 소수점 1자리 비교 (slider step 기준)
                         if round(input_vars[var], 1) != opt_params[var]:
-                            change = "↑ 상향" if opt_params[var] > input_vars[var] else "↓ 하향"
+                            change = "↑ 상향" if opt_params[var] > round(input_vars[var], 1) else "↓ 하향"
                             summary_data[var] = f"{opt_params[var]} ({change})"
                     
                     if summary_data:
-                        st.table(pd.DataFrame(summary_data.values(), index=summary_data.keys(), columns=['변화된 조건']))
+                        # 테이블의 인덱스(변수명)를 더 잘 보이게 처리
+                        summary_df = pd.DataFrame(summary_data.values(), index=summary_data.keys(), columns=['변화된 조건'])
+                        summary_df.index.name = '변수'
+                        st.table(summary_df)
                     else:
-                        st.info("현재 조건이 이미 최적 조건에 가깝습니다.")
-                    
+                        st.info("현재 조건이 이미 최적 조건에 가깝거나, 노하우 제약 조건으로 인해 더 이상 개선되지 않았습니다.")
+                        
                 else:
                     st.error(f"⚠️ 최적화 실패: {result.message}")
 
