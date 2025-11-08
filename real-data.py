@@ -53,7 +53,7 @@ for var, default_val in DEFAULT_INPUT_VALS.items():
 # UI 상태를 위한 세션 상태 추가
 if 'conf_level' not in st.session_state:
     st.session_state['conf_level'] = 75.0
-# 🌟 노하우 영향 계수 세션 상태 추가 (초기값 0.75)
+# 🌟 노하우 영향 계수 세션 상태 초기화
 if 'influence_factor_display_val' not in st.session_state:
     st.session_state['influence_factor_display_val'] = st.session_state['conf_level'] / 100.0
 
@@ -71,22 +71,27 @@ if 't_mold_qual_intent' not in st.session_state:
     st.session_state['t_mold_qual_intent'] = 'Keep_Constant'
 
 # -------------------------------------------------------------
-# 🌟 콜백 함수: 전문가 확신 수준 변경 시 영향 계수 업데이트
+# 🌟 콜백 함수: 전문가 확신 수준 변경 시 영향 계수 업데이트 (핵심 수정)
 # -------------------------------------------------------------
 def update_influence_factor():
-    """전문가 확신 수준 슬라이더 변경 시 노하우 영향 계수 세션 상태를 업데이트"""
-    # 'expert_confidence_slider' 키의 현재 값을 가져와서 100으로 나눔
+    """전문가 확신 수준 슬라이더 변경 시 영향 계수와 진단 결과를 업데이트"""
+    
+    # 🌟 'expert_confidence_slider'의 현재 값(0~100)을 가져옴
     new_confidence_level = st.session_state['expert_confidence_slider']
     new_influence_factor = new_confidence_level / 100.0
+    
+    # 🌟 세션 상태에 저장된 'conf_level'과 'influence_factor_display_val'을 즉시 업데이트
+    st.session_state['conf_level'] = new_confidence_level
     st.session_state['influence_factor_display_val'] = new_influence_factor
-    # 최적화 결과 초기화 (값이 바뀌었으므로)
+    
+    # 노하우가 변경되었으므로 진단 및 최적화 결과 초기화
+    st.session_state['current_risk_display'] = None 
     st.session_state['optimization_result'] = None 
 # -------------------------------------------------------------
 
 
 # =================================================================
 # 1. 데이터 로드 및 전처리 함수
-# (이전과 동일하므로 생략)
 # =================================================================
 
 @st.cache_data(show_spinner=False)
@@ -133,7 +138,6 @@ def process_weld_data(df_virtual, df_real):
 
 # =================================================================
 # 2. 모델 학습 함수
-# (이전과 동일하므로 생략)
 # =================================================================
 def train_model(df):
     """데이터를 사용하여 로지스틱 회귀 모델을 학습하고 스케일러를 저장합니다."""
@@ -153,7 +157,6 @@ def train_model(df):
 
 # =================================================================
 # 3. 예측 및 최적화 함수
-# (이전과 동일하므로 생략)
 # =================================================================
 def predict_weld_risk(model, scaler, input_data):
     """입력 데이터에 대한 불량 확률을 예측합니다."""
@@ -309,7 +312,7 @@ with tab1:
         # 🌟 값이 변경될 때마다 영향 계수 세션 상태를 업데이트
         on_change=update_influence_factor 
     )
-    st.session_state['conf_level'] = expert_confidence
+    # st.session_state['conf_level'] 값은 콜백 내에서 업데이트됨
     st.markdown('<div style="margin-top: -20px; font-size: 12px; color: grey;">(0%는 노하우 미반영, 100%는 노하우를 제약 조건으로 강력히 적용)</div>', unsafe_allow_html=True)
 
     # -------------------------------------------------------------
@@ -421,11 +424,11 @@ with tab1:
 
     # 🌟 노하우 영향 계수 (세션 상태 값 참조)
     st.write("노하우 영향 계수")
+    # 🌟 value를 세션 상태의 influence_factor_display_val로 설정
     st.slider(
         '노하우 영향 계수 (0.0~1.0)', 
         0.0, 
         1.0, 
-        # 🌟 세션 상태 값 참조 및 업데이트된 값을 사용
         value=st.session_state['influence_factor_display_val'], 
         step=0.01, 
         label_visibility="collapsed",
@@ -481,6 +484,7 @@ with tab1:
         v_min_global, v_max_global = 1.0, 10.0
         v_min_opt, v_max_opt = v_min_global, v_max_global
         
+        # 노하우 적용 조건 (정량적 적용 또는 정성적 적용 + Keep_Constant가 아닌 경우)
         if v_inj_quant_apply or (v_inj_qual_apply and v_inj_intent != 'Keep_Constant'):
             delta = v_inj_delta * influence_factor 
             if v_inj_intent == 'Increase':
